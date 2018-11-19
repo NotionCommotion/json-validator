@@ -1,6 +1,5 @@
 {
     "name": "greenbean/json-validator",
-    "version": "0.0.1",
     "description": "Validates JSON.",
     "type": "project",
     "authors": [
@@ -9,15 +8,13 @@
             "email": "villascape@gmail.com"
         }
     ],
-    "minimum-stability": "dev",
     "require": {
         "php": ">=5.4.0"
     },
     "require-dev": {},
     "autoload": {
         "psr-4": {
-            "Greenbean\\JsonValidator\\":  "src/",
-            "Greenbean\\JsonValidator\\Tests\\":  "tests/"
+            "Greenbean\\JsonValidator\\":  "src/"
         }
     }
 }
