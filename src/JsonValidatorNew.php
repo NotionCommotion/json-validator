@@ -45,9 +45,6 @@ class JsonValidator
         If a string type starts with an tilde "~", it is optional.
         An object with any content is specified as an empty array [].
         An sequntial array with any content is specified by ['*']
-        Object which implements ValidatorCallbackInterface (used for non-typical and complicated validation)
-
-
         ## REMOVE: Special types "array", "object", "object|array", and "array|object" can be specified for the general type, and if so, will not be validated recursivly and value validation methods are limited to empty and notEmpty.
 
         Values:
@@ -78,7 +75,7 @@ class JsonValidator
         $obj=new \stdClass;
         foreach($rules as $key => $rule) {
             if (is_array($rule)) {
-                if(empty($rule) || isset($rule[0])) {
+                if(isset($rule[0])) {
                     $obj->$key=$rule;
                 }
                 else {
