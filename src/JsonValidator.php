@@ -16,7 +16,7 @@ class JsonValidator
         }
     }
 
-    public function object($input, $blueprint){
+    public function object($input, $blueprint, ?bool $sanitize=null){
         /*
         Description:
         Validateds JSON object's properties type and values based on a stdClass "blueprint" which specifies rules.
@@ -64,14 +64,15 @@ class JsonValidator
 
         if( !is_array($blueprint) && !(is_object($blueprint) && is_a($blueprint,'stdClass'))) throw new JsonValidatorException('Invalid blueprint provided.  Must be an array or stdClass object.');
         if( !is_array($input) && !(is_object($input) && is_a($input,'stdClass'))) throw new JsonValidatorException('Invalid input provided.  Must be an array or stdClass object.');
+        $origArray=is_array($input);
         $input=json_decode(json_encode($input));
         $blueprint=$this->array2Obj($blueprint);
         if(!$input && !$blueprint) return $input;
-        $errors=$this->_object($input, $blueprint, 'base', []);
+        $errors=$this->_object($input, $blueprint, $sanitize??$this->sanitize, 'base', []);
         if($errors) {
             throw new JsonValidatorException('Validation error', 1, null, $errors, $blueprint, $input);
         }
-        return $input;
+        return $origArray?json_decode(json_encode($input, true)):$input;
     }
 
     protected function array2Obj(array $rules) {
@@ -99,7 +100,7 @@ class JsonValidator
     }
 
     //Methods are protected and not private so that this class can be extended
-    protected function _object($input, $blueprint, $level, array $errors){
+    protected function _object($input, $blueprint, bool $sanitize, $level, array $errors){
         //$blueprint should only be an object or an unassociated array
         /*
         $xdb_input=json_encode($input);
@@ -129,7 +130,7 @@ class JsonValidator
                         if(is_array($blueprint[0]) || is_object($blueprint[0])) {
                             $err=[];
                             foreach($input as $key=>$item) {
-                                if($e=self::_object($item, $blueprint[0], $level.'['.$key.']', $errors)) {
+                                if($e=self::_object($item, $blueprint[0], $sanitize, $level.'['.$key.']', $errors)) {
                                     $e[]=$err;
                                 }
                             }
@@ -144,7 +145,7 @@ class JsonValidator
 
                             if($rule[0]!='*') { // * means any type, so skip (value validation not avaiable)
                                 foreach($input as $key=>$item) {
-                                    if($this->sanitize) {
+                                    if($sanitize) {
                                         $item=$this->sanitize($item, $rule[0]);
                                     }
                                     $type=gettype($item);
@@ -198,7 +199,7 @@ class JsonValidator
                             $errors[]="Unexpected $missingType property '$prop' in the '$level' object.";
                         }
                         else {
-                            $errors=array_merge($errors,self::_object($input->$prop, $blueprint->$prop, $level.'['.$prop.']', $errors));
+                            $errors=array_merge($errors,self::_object($input->$prop, $blueprint->$prop, $sanitize, $level.'['.$prop.']', $errors));
                         }
                     }
                     elseif(is_array($rule)) {
@@ -210,7 +211,7 @@ class JsonValidator
                             $errors[]="Unexpected $missingType property '$prop' in the '$level' object.";
                         }
                         else {
-                            $errors=array_merge($errors,self::_object($input->$prop, $rule, $level.'['.$prop.']', $errors));
+                            $errors=array_merge($errors,self::_object($input->$prop, $rule, $sanitize, $level.'['.$prop.']', $errors));
                         }
                     }
                     elseif(isset($input->$prop) || $rule[0]!='~') { //Skip if optional and not provided in input
@@ -224,7 +225,7 @@ class JsonValidator
                             $errors[]="Missing property '$prop' in the '$level' object.";
                         }
                         elseif($rule[0]!='*') { // * means any type, so skip (value validation not avaiable)
-                            if($this->sanitize) {
+                            if($sanitize) {
                                 $input->$prop=$this->sanitize($input->$prop, $rule[0]);
                             }
                             $type=gettype($input->$prop);
