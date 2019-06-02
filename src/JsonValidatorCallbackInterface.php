@@ -1,5 +1,5 @@
 <?php
 namespace Greenbean\JsonValidator;
-interface ValidatorCallbackInterface{
+interface JsonValidatorCallbackInterface{
     public function validate(JsonValidator $validator, \stdClass $input, array &$errors=[]):JsonValidator;
 }
