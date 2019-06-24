@@ -157,21 +157,15 @@ class JsonValidator
     private function validateObject(array &$input, $rules, bool $sanitize, string $level):?string{
         $errors=[];
         foreach($rules as $prop=>$rule){
-            $optional=false;
-            if($rule[0]=='~') {
-                $optional=true;
-                $rule=substr($rule, 1);
-            }
             if(!is_string($prop) || !$prop) {
                 $errors[]="$prop for level $level must be an associated array";
             }
-            elseif(!isset($input[$prop])) {
-                if(!$optional) {
+            elseif(is_array($rule)) {
+                //How can I make sequential arrays and associated arrays optional?
+                if(!isset($input[$prop])) {
                     $errors[]="$prop for level $level is missing";
                 }
-            }
-            elseif(is_array($rule)) {
-                if(!is_array($input[$prop])) {
+                elseif(!is_array($input[$prop])) {
                     $errors[]="$prop for level $level must be an array";
                 }
                 elseif($this->isSequencial($rule)) {
@@ -184,12 +178,25 @@ class JsonValidator
                 }
             }
             elseif($rules instanceof JsonValidatorCallbackInterface){
-                if($e=$rule->validate($this, $input[$prop])) {
+                //How can I make JsonValidatorCallbackInterface optional?
+                if(!isset($input[$prop])) {
+                    $errors[]="$prop for level $level is missing";
+                }
+                elseif($e=$rule->validate($this, $input[$prop])) {
                     $errors[]=$e;
                 }
             }
             elseif(is_string($rule)) {
-                if($rule[0]!=='*') {    //
+                if($rule[0]==='~') {
+                    if(!isset($input[$prop])){
+                        break;
+                    }
+                    $rule=substr($rule, 1);
+                }
+                if(!isset($input[$prop])) {
+                    $errors[]="$prop for level $level is missing";
+                }
+                elseif($rule[0]!=='*') {    //
                     $rule=explode(':',$rule); //[0=>typeRule,1=>validationRule]
                     try {
                         $input[$prop]=$this->validateItem($rule[0], $rule[1]??null, $input[$prop], $prop, $sanitize);
@@ -202,13 +209,12 @@ class JsonValidator
             else {
                 throw new JsonValidatorErrorException('Invalid rule.  Must be array, string, or JsonValidatorCallbackInterface');
             }
-            return $errors?implode(', ',$errors):null;
-
         }
+        return $errors?implode(', ',$errors):null;
     }
 
     private function validateItem(string $requiredType, ?string $valueRule, $value, string $name, bool $sanitize) {
-        if($requiredType[0]!='*') { // * means any type, so skip (value validation not avaiable)
+        if($requiredType[0]!=='*') { // * means any type, so skip (value validation not avaiable)
             if($sanitize) {
                 $value=$this->sanitize($value, $requiredType);
             }
