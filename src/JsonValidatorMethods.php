@@ -13,66 +13,71 @@ class JsonValidatorMethods
     public function empty($v, array $a, $prop)
     {
         if(count($a)!==0) throw new JsonValidatorErrorException('Invalid arguement count.');
-        return [empty((array)$v),"empty($prop)"];
+        return [empty((array)$v),"$prop must be empty"];
     }
     public function minValue($v, array $a, $prop)
     {
         if(count($a)!==1) throw new JsonValidatorErrorException('Invalid arguement count.');
-        return [$v>=$a[0],"$prop>=$a[0]"];
+        return [$v>=$a[0],"$prop minimum value is $a[0]"];
     }
     public function maxValue($v, array $a, $prop)
     {
         if(count($a)!==1) throw new JsonValidatorErrorException('Invalid arguement count.');
-        return [$v<=$a[0],"$prop<=$a[0]"];
+        return [$v<=$a[0],"$prop maximum value is $a[0]"];
     }
     public function betweenValue($v, array $a, $prop)
     {
         if(count($a)!==2) throw new JsonValidatorErrorException('Invalid arguement count.');
         sort($a);
-        return [$v>=$a[0] && $v<=$a[1],"$a[0]>=$prop<=$a[1]"];
+        return [$v>=$a[0] && $v<=$a[1],"$prop must be between $a[0] and $a[1]"];
     }
     public function exactValue($v, array $a, $prop)
     {
         if(count($a)!==1) throw new JsonValidatorErrorException('Invalid arguement count.');
-        return [$v==$a[0],"$prop==$a[0]"];
+        return [$v==$a[0],"$prop must be exactly $a[0]"];
     }
     public function minLength($v, array $a, $prop)
     {
         if(count($a)!==1) throw new JsonValidatorErrorException('Invalid arguement count.');
-        return [strlen(trim($v))>=$a[0],"strlen($prop)>=$a[0]"];
+        return [strlen(trim($v))>=$a[0],"$prop's minimum length is $a[0]"];
     }
     public function maxLength($v, array $a, $prop)
     {
         if(count($a)!==1) throw new JsonValidatorErrorException('Invalid arguement count.');
-        return [strlen(trim($v))<=$a[0],"strlen($prop)<=$a[0]"];
+        return [strlen(trim($v))<=$a[0],"$prop's maximum length is $a[0]"];
     }
     public function betweenLength($v, array $a, $prop)
     {
         if(count($a)!==2) throw new JsonValidatorErrorException('Invalid arguement count.');
         $v=trim($v);
         sort($a);
-        return [strlen($v)>=$a[0] && strlen($v)<$a[1],"$a[0]>=strlen($prop)<=$a[1]"];
+        return [strlen($v)>=$a[0] && strlen($v)<$a[1],"$prop's length must be between $a[0] and $a[1]"];
     }
     public function exactLength($v, array $a, $prop)
     {
         if(count($a)!==1) throw new JsonValidatorErrorException('Invalid arguement count.');
-        return [strlen(trim($v))==$a[0],"strlen($prop)==$a[0]"];
+        return [strlen(trim($v))==$a[0],"$prop's exact length must be $a[0]"];
+    }
+
+    public function inArray($v, array $a, $prop)
+    {
+        return [in_array($v, $a), "$prop must be one of: ".implode(', ',$a)];
     }
 
     public function email($v, array $a, $prop)
     {
         if(count($a)!==0) throw new JsonValidatorErrorException('Invalid arguement count.');
-        return [filter_var($v, FILTER_VALIDATE_EMAIL),"valid_email($prop)"];
+        return [filter_var($v, FILTER_VALIDATE_EMAIL),"$prop is not a valid email"];
     }
     public function url($v, array $a, $prop)
     {
         if(count($a)!==0) throw new JsonValidatorErrorException('Invalid arguement count.');
-        return [filter_var($v, FILTER_VALIDATE_URL),"valid_url($prop)"];
+        return [filter_var($v, FILTER_VALIDATE_URL),"$prop is not a valid URL"];
     }
     public function ipaddress($v, array $a, $prop)
     {
         if(count($a)!==0) throw new JsonValidatorErrorException('Invalid arguement count.');
-        return [filter_var($v, FILTER_VALIDATE_IP),"valid_ip($prop)"];
+        return [filter_var($v, FILTER_VALIDATE_IP),"$prop is not a valid IP address"];
     }
 
     /*

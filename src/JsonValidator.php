@@ -21,7 +21,7 @@ Ruleset:  Specifies the type and value of each property in the JSON object, and 
 Types:
 Supported types: string, integer, double and boolean, object (stdClass only), and arrays.
 Note that double is used because of float since for historical reasons "double" is returned in case of a float, and not simply "float" (http://php.net/manual/en/function.gettype.php)
-Multiple types for a single property are not supported (except for general objects and arrays).
+Multiple types for a single property are specified by using | (i.e. double|text) (and also are supprted for general objects and arrays?)
 Objects are specifying using an associated array using name/rule for each element.
 Sequential arrays are specified by a single element sequencial array which is used for all elements.
 Arrays and objects can be recursive.
@@ -48,27 +48,41 @@ Example:
 
 class JsonValidator
 {
-    const DELIMINATOR = '~';    //Internal use with object() for the replacement of parenthese content, but can be changed if conflicts with user data (not necessary?)
-    private $strictMode=true;   //Currently only enfources that boolean is true/false
-    private $sanitize=false;    //Whether to sanitize (i.e. 'false' is changed to false)
-    private $methods;
+    //Use provided options which can be applied either in constructor or validation method, but cannot be disabled once set.
+    const SANITIZE      =   0b0001;   //Whether to sanitize (i.e. 'false' is changed to false)
+    const STRICTMODE    =   0b0010;   //Currently only enfources that boolean is true/false (instead of 1/0 or "true"/"false")
+    const SETDEFAULT    =   0b0100;   //If true, type double and value "nan" will be converted to 0.
 
-    static public function create(array $config=[]):self
+    const DELIMINATOR = '~';    //Internal use with object() for the replacement of parenthese content, but can be changed if conflicts with user data (not necessary?)
+    private $methods,
+    $options;
+
+    static public function create(int $options=0):self
     {
-        return new self(new JsonValidatorMethods, $config);
+        return new self(new JsonValidatorMethods, $options);
     }
 
-    public function __construct(JsonValidatorMethods $methods, array $config=[])
+    static public function getOption(array $options):int
+    {
+        $o=0;
+        foreach($options as $option) {
+            if(!defined("self::$option")){
+                throw new JsonValidatorErrorException((is_string($option)?$option:'given constant').' is not valid');
+            }
+            $o=$o|constant("self::$option");
+        }
+        return $o;
+    }
+
+    public function __construct(JsonValidatorMethods $methods, int $options=0)
     {
         $this->methods=$methods;
-        if(!is_array($config)) throw JsonValidatorErrorException('Constructor must be provided an array or no value');
-        if(array_diff($config,array_flip(['strictMode', 'sanitize']))) throw JsonValidatorErrorException('Invalid constructor value');
-        foreach($config as $index=>$value) {
-            $this->$index=$value;
-        }
+        $this->options=$options;
     }
 
-    public function validate($input, $rules, ?bool $sanitize=null){
+    public function validate($input, $rules, int $options=0){
+
+        $options=$options|$this->options;
 
         if( !is_array($rules) && !is_a($rules,'stdClass')) throw new JsonValidatorErrorException('Invalid rule provided.  Must be an array or stdClass object.');
         if( !is_array($input) && !is_a($input,'stdClass')) throw new JsonValidatorErrorException('Invalid input provided.  Must be an array or stdClass object.');
@@ -78,15 +92,15 @@ class JsonValidator
         }
         $rules=is_array($rules)?$this->validateRules($rules):$this->objectToArray($rules);
         $errors=$this->isSequencial($rules)
-        ?$this->validateArray($input, $rules[0]??['*'], $sanitize??$this->sanitize, 'base')
-        :$this->validateObject($input, $rules, $sanitize??$this->sanitize, 'base');
+        ?$this->validateArray($input, $rules[0]??['*'], $options, 'base')
+        :$this->validateObject($input, $rules, $options, 'base');
         if($errors) {
             throw new JsonValidatorException('Validation error', 1, null, $errors, $rules, $input);
         }
         return $origArray?$input:json_decode(json_encode($input, false));
     }
 
-    private function validateArray(array &$input, $rule, bool $sanitize, string $level):?string {
+    private function validateArray(array &$input, $rule, int $options, string $level):?string {
         $i=0;
         $errors=[];
         if(is_array($rule) && $this->isSequencial($rule)) {
@@ -97,7 +111,7 @@ class JsonValidator
                 elseif(!is_array($item)) {
                     $errors[]="Item $index must be an array";
                 }
-                elseif($rule && $e=$this->validateArray($item, $rule[0]??['*'], $sanitize, $level.'['.$index.']')) {
+                elseif($rule && $e=$this->validateArray($item, $rule[0]??['*'], $options, $level.'['.$index.']')) {
                     $errors[]=$e;
                 }
             }
@@ -110,7 +124,7 @@ class JsonValidator
                 elseif(!is_array($item)) {
                     $errors[]="Item $index must be an array";
                 }
-                elseif($e=$this->validateObject($item, $rule, $sanitize, $level.'['.$index.']')) {
+                elseif($e=$this->validateObject($item, $rule, $options, $level.'['.$index.']')) {
                     $errors[]=$e;
                 }
             }
@@ -138,7 +152,7 @@ class JsonValidator
                     }
                     else {
                         try {
-                            $input[$index]=$this->validateItem($rule[0], $method, $item, 'sequential array value', $sanitize);
+                            $input[$index]=$this->validateItem($rule[0], $method, $item, 'sequential array value', $options);
                         }
                         catch(JsonValidatorItemException $e) {
                             $errors[]=$e->getMessage();
@@ -154,7 +168,7 @@ class JsonValidator
         return $errors?implode(', ',$errors):null;
     }
 
-    private function validateObject(array &$input, $rules, bool $sanitize, string $level):?string{
+    private function validateObject(array &$input, $rules, int $options, string $level):?string{
         $errors=[];
         foreach($rules as $prop=>$rule){
             if(!is_string($prop) || !$prop) {
@@ -169,11 +183,11 @@ class JsonValidator
                     $errors[]="$prop for level $level must be an array";
                 }
                 elseif($this->isSequencial($rule)) {
-                    if($e = $this->validateArray($input[$prop], $rule[0]??['*'], $sanitize, $level.'['.$prop.']')) {
+                    if($e = $this->validateArray($input[$prop], $rule[0]??['*'], $options, $level.'['.$prop.']')) {
                         $errors[]=$e;
                     }
                 }
-                elseif($e = $this->validateObject($input[$prop], $rule, $sanitize, $level.'['.$prop.']')) {
+                elseif($e = $this->validateObject($input[$prop], $rule, $options, $level.'['.$prop.']')) {
                     $errors[]=$e;
                 }
             }
@@ -199,7 +213,7 @@ class JsonValidator
                 elseif($rule[0]!=='*') {    //
                     $rule=explode(':',$rule); //[0=>typeRule,1=>validationRule]
                     try {
-                        $input[$prop]=$this->validateItem($rule[0], $rule[1]??null, $input[$prop], $prop, $sanitize);
+                        $input[$prop]=$this->validateItem($rule[0], $rule[1]??null, $input[$prop], $prop, $options);
                     }
                     catch(JsonValidatorItemException $e) {
                         $errors[]=$e->getMessage();
@@ -213,13 +227,36 @@ class JsonValidator
         return $errors?implode(', ',$errors):null;
     }
 
-    private function validateItem(string $requiredType, ?string $valueRule, $value, string $name, bool $sanitize) {
+    private function isBoolean($value):bool {
+        return is_bool($value) || is_string($value)&&in_array(strtolower($value), array("true", "false", "1", "0", "yes", "no"), true);
+    }
+    private function validateItem(string $requiredType, ?string $valueRule, $value, string $name, int $options) {
         if($requiredType[0]!=='*') { // * means any type, so skip (value validation not avaiable)
-            if($sanitize) {
-                $value=$this->sanitize($value, $requiredType);
+            $types=explode('|',$requiredType);
+            if(count($types)>1) {
+                //This happens before sanitation thus all types are strings, and must "guess" type
+                if(in_array('integer', $types) && (is_int($value) || ctype_digit($value))){
+                    $requiredType='integer';
+                }
+                elseif(in_array('boolean', $types) && $this->isBoolean(value) ){
+                    $requiredType='boolean';
+                }
+                elseif(in_array('double', $types) && is_numeric($value)){
+                    $requiredType='double';
+                }
+                elseif(in_array('string', $types) && is_string($value)){
+                    $requiredType='string';
+                }
+                else{
+                    syslog(LOG_ERR, "JsonValidator::validateItem():  Invalid type for $name");
+                    throw new JsonValidatorItemException("Invalid type for $name");
+                }
+            }
+            if($options & self::SANITIZE) {
+                $value=$this->sanitize($value, $requiredType, $options);
             }
             $type=gettype($value);
-            if( $type!==$requiredType && $this->strictBoolean($value, $requiredType)) {
+            if( $type!==$requiredType && $this->strictBoolean($value, $requiredType, $options)) {
                 throw new JsonValidatorItemException("property is a $type but should be a $requiredType.");
                 $errors[]=$isArr
                 ?"Sequential array value in the '$level' object is a $type but should be a $requiredType."
@@ -310,27 +347,44 @@ class JsonValidator
         return $rules;
     }
 
-    private function sanitize($value, string $type) {
+    private function sanitize($value, string $type, int $options) {
         switch($type) {
             case 'string':case 'object':case 'array':    //Not sanitized
                 break;
             case 'integer':
-                if(ctype_digit($value)) $value=(int)$value;
+                if(ctype_digit($value) || (!is_int($value) && self::SETDEFAULT&$options && $this->logStrictSanitize($value, $type))) {
+                    $value=(int)$value;
+                }
                 break;
             case 'boolean':
-                if(!is_bool($value)) $value=filter_var($value, FILTER_VALIDATE_BOOLEAN);
+                if($this->isBoolean($value) || (!is_bool($value) && self::SETDEFAULT&$options && $this->logStrictSanitize($value, $type))) {
+                    $value=filter_var($value, FILTER_VALIDATE_BOOLEAN);
+                }
                 break;
             case 'double':
-                if(!is_float($value)) $value=filter_var($value, FILTER_VALIDATE_FLOAT);
+                if(!is_float($value)) {
+                    if(($v=filter_var($value, FILTER_VALIDATE_FLOAT))===false) {
+                        if(self::SETDEFAULT&$options){
+                            $this->logStrictSanitize($value, $type);
+                            $value=0.0; //Must use 0.0 or type cast as float.
+                        }
+                    }
+                    else $value=$v;
+                }
                 break;
             default: throw new JsonValidatorErrorException("Invalid type '$type'");
         }
         return $value;
     }
 
-    private function strictBoolean($value, string $rule):bool {
-        //returns false only if not in strictMode and testing boolean who's value is 0 or 1
-        return $this->strictMode || $rule!=='boolean' || !in_array($value,[0,1]);
+    private function logStrictSanitize($value, string $type):bool{
+        syslog(LOG_ERR, "JsonValidator::sanitize(value: $value, type: $type)");
+        return true;
+    }
+
+    private function strictBoolean($value, string $rule, int $options):bool {
+        //returns false only if not in STRICTMODE and testing boolean who's value is 0 or 1
+        return self::STRICTMODE&$options || $rule!=='boolean' || !in_array($value,[0,1]);
     }
 
     //Converts stdClass to array and removes whitespace. Needs further testing.
