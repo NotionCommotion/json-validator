@@ -80,6 +80,12 @@ class JsonValidatorMethods
         return [filter_var($v, FILTER_VALIDATE_IP),"$prop is not a valid IP address"];
     }
 
+    public function timestamp($v, array $a, $prop)
+    {
+        if(count($a)!==0) throw new JsonValidatorErrorException('Invalid arguement count.');
+        return [(strtotime($v)),"$prop is not a valid timestamp"];
+    }
+
     /*
     //FUTURE.  NOT COMPLETE
     public function domain($v, array $a, $prop)

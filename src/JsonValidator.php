@@ -350,6 +350,7 @@ class JsonValidator
     private function sanitize($value, string $type, int $options) {
         switch($type) {
             case 'string':case 'object':case 'array':    //Not sanitized
+            case 'timestamp':   //Maybe sanitize later on?
                 break;
             case 'integer':
                 if(ctype_digit($value) || (!is_int($value) && self::SETDEFAULT&$options && $this->logStrictSanitize($value, $type))) {
