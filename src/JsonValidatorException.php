@@ -9,6 +9,7 @@ class JsonValidatorException extends \Exception
         $this->errors=$errors;
         $this->blueprint=$blueprint;
         $this->input=$input;
+        $message = $this->getError();
         parent::__construct($message, $code, $previous);
     }
 

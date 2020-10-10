@@ -52,14 +52,16 @@ class JsonValidator
     const SANITIZE      =   0b0001;   //Whether to sanitize (i.e. 'false' is changed to false)
     const STRICTMODE    =   0b0010;   //Currently only enfources that boolean is true/false (instead of 1/0 or "true"/"false")
     const SETDEFAULT    =   0b0100;   //If true, type double and value "nan" will be converted to 0.
+    const CAMELIZE      =   0b1000;   //If true, will change from snake-type to camelType.
 
     const DELIMINATOR = '~';    //Internal use with object() for the replacement of parenthese content, but can be changed if conflicts with user data (not necessary?)
     private $methods,
-    $options;
+    $options,
+    $true, $false;  // $true and $false used to validate boolean
 
-    static public function create(int $options=0):self
+    static public function create(int $options=0, array $true=[], array $false=[]):self
     {
-        return new self(new JsonValidatorMethods, $options);
+        return new self(new JsonValidatorMethods, $options, $true, $false);
     }
 
     static public function getOption(array $options):int
@@ -74,10 +76,12 @@ class JsonValidator
         return $o;
     }
 
-    public function __construct(JsonValidatorMethods $methods, int $options=0)
+    public function __construct(JsonValidatorMethods $methods, int $options=0, array $true=[], array $false=[])
     {
         $this->methods=$methods;
         $this->options=$options;
+        $this->true=$true;
+        $this->false=$false;
     }
 
     public function validate($input, $rules, int $options=0){
@@ -100,11 +104,29 @@ class JsonValidator
         return $origArray?$input:json_decode(json_encode($input, false));
     }
 
+    // Used by this class and maybe by JsonValidatorCallbackInterface
+    public function toBoolean($value) {
+        //Will not convert non-key words to boolean
+        if(in_array($value, $this->true)) {
+            return true;
+        }
+        if(in_array($value, $this->false)) {
+            return false;
+        }
+        return $value;
+    }
+
+    // Only used by JsonValidatorCallbackInterface
+    public function getUnexpectedProperties(array $o, array $valid):?string
+    {
+        return ($extra = array_diff_key($o, array_flip($valid)))?'Unknown object properties: '.implode(', ', array_keys($extra)):null;
+    }
+
     private function validateArray(array &$input, $rule, int $options, string $level):?string {
         $i=0;
         $errors=[];
         if(is_array($rule) && $this->isSequencial($rule)) {
-            foreach($input as $index=>$item) {
+            foreach($input as $index=>&$item) {
                 if($index!==$i++) {
                     $errors[]="Array index $index in $level is not sequencial";
                 }
@@ -117,7 +139,7 @@ class JsonValidator
             }
         }
         elseif(is_array($rule)) {
-            foreach($input as $index=>$item) {
+            foreach($input as $index=>&$item) {
                 if($index!==$i++) {
                     $errors[]="Array index $index in $level is not sequencial";
                 }
@@ -130,11 +152,11 @@ class JsonValidator
             }
         }
         elseif($rule instanceof JsonValidatorCallbackInterface){
-            foreach($input as $index=>$item) {
+            foreach($input as $index=>&$item) {
                 if($index!==$i++) {
                     $errors[]="Array index $index in $level is not sequencial";
                 }
-                elseif($e=$rule->validate($this, $item)) {
+                elseif($e=$rule->validate($this, null, $item)) {
                     $errors[]=$e;
                 }
             }
@@ -146,7 +168,7 @@ class JsonValidator
             if($rule[0]!=='*') {
                 $rule=explode(':',$rule); //[0=>typeRule,1=>validationRule]
                 $method=$rule[1]??null;
-                foreach($input as $index=>$item) {
+                foreach($input as $index=>&$item) {
                     if($index!==$i++) {
                         $errors[]="Array index $index in $level is not sequencial";
                     }
@@ -170,6 +192,7 @@ class JsonValidator
 
     private function validateObject(array &$input, $rules, int $options, string $level):?string{
         $errors=[];
+        $customRuleObjects = [];
         foreach($rules as $prop=>$rule){
             if(!is_string($prop) || !$prop) {
                 $errors[]="$prop for level $level must be an associated array";
@@ -191,13 +214,14 @@ class JsonValidator
                     $errors[]=$e;
                 }
             }
-            elseif($rules instanceof JsonValidatorCallbackInterface){
+            elseif($rule instanceof JsonValidatorCallbackInterface){
                 //How can I make JsonValidatorCallbackInterface optional?
-                if(!isset($input[$prop])) {
+                if(!isset($input[$prop]) && mb_substr($prop, 0, 1)!=='~') {
                     $errors[]="$prop for level $level is missing";
                 }
-                elseif($e=$rule->validate($this, $input[$prop])) {
-                    $errors[]=$e;
+                else {
+                    // Check after all other properties have been sanitized
+                    $customRuleObjects[$prop]=$rule;
                 }
             }
             elseif(is_string($rule)) {
@@ -224,12 +248,32 @@ class JsonValidator
                 throw new JsonValidatorErrorException('Invalid rule.  Must be array, string, or JsonValidatorCallbackInterface');
             }
         }
+        foreach($customRuleObjects as $prop =>$customRuleObject) {
+            if($e=$customRuleObject->validate($this, $prop, $input)) {
+                $errors[]=$e;
+            }
+        }
+        /*
+        if(self::CAMELIZE) {
+            $output = [];
+            foreach($input as $key=>$value) {
+                $output[$this->camelize($key)] = $value;
+            }
+            $input = $output;
+        }
+        */
         return $errors?implode(', ',$errors):null;
     }
 
-    private function isBoolean($value):bool {
-        return is_bool($value) || is_string($value)&&in_array(strtolower($value), array("true", "false", "1", "0", "yes", "no"), true);
+    public function camelize(string $input, string $separator='_'):string
+    {
+        return str_replace($separator, '', lcfirst(ucwords($input, $separator)));
     }
+
+    private function isBoolean($value):bool {
+        return is_bool($value) || is_string($value)&&in_array(strtolower($value), array_merge($this->true, $this->false), true);
+    }
+
     private function validateItem(string $requiredType, ?string $valueRule, $value, string $name, int $options) {
         if($requiredType[0]!=='*') { // * means any type, so skip (value validation not avaiable)
             $types=explode('|',$requiredType);
@@ -238,7 +282,7 @@ class JsonValidator
                 if(in_array('integer', $types) && (is_int($value) || ctype_digit($value))){
                     $requiredType='integer';
                 }
-                elseif(in_array('boolean', $types) && $this->isBoolean(value) ){
+                elseif(in_array('boolean', $types) && $this->isBoolean($value) ){
                     $requiredType='boolean';
                 }
                 elseif(in_array('double', $types) && is_numeric($value)){
@@ -249,13 +293,17 @@ class JsonValidator
                 }
                 else{
                     syslog(LOG_ERR, "JsonValidator::validateItem():  Invalid type for $name");
-                    throw new JsonValidatorItemException("Invalid type for $name");
+                    $test = "requiredType $requiredType gettype ".gettype($value);
+                    throw new JsonValidatorItemException("Invalid type for $name $test");
                 }
             }
             if($options & self::SANITIZE) {
                 $value=$this->sanitize($value, $requiredType, $options);
             }
             $type=gettype($value);
+            if($requiredType==='timestamp') {
+                $requiredType='string';
+            }
             if( $type!==$requiredType && $this->strictBoolean($value, $requiredType, $options)) {
                 throw new JsonValidatorItemException("property is a $type but should be a $requiredType.");
                 $errors[]=$isArr
@@ -349,8 +397,10 @@ class JsonValidator
 
     private function sanitize($value, string $type, int $options) {
         switch($type) {
-            case 'string':case 'object':case 'array':    //Not sanitized
-            case 'timestamp':   //Maybe sanitize later on?
+            case 'object':case 'array':    //Not sanitized
+                break;
+            case 'string': case 'timestamp':    //timestamp will always be a string
+                $value = trim($value);
                 break;
             case 'integer':
                 if(ctype_digit($value) || (!is_int($value) && self::SETDEFAULT&$options && $this->logStrictSanitize($value, $type))) {
@@ -358,9 +408,12 @@ class JsonValidator
                 }
                 break;
             case 'boolean':
+                $value = $this->toBoolean($value);
+                /*
                 if($this->isBoolean($value) || (!is_bool($value) && self::SETDEFAULT&$options && $this->logStrictSanitize($value, $type))) {
-                    $value=filter_var($value, FILTER_VALIDATE_BOOLEAN);
+                $value=filter_var($value, FILTER_VALIDATE_BOOLEAN);
                 }
+                */
                 break;
             case 'double':
                 if(!is_float($value)) {
