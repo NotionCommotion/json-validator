@@ -31,6 +31,13 @@ An object with any content is specified as an empty array [].
 An sequntial array with any content is specified by ['*']
 Object which implements JsonValidatorCallbackInterface (used for non-typical and complicated validation)
 
+Exlusive Property Names:
+If $arr[0] is either "||" (OR) or "|!" (XOR) and the array is not a sequencial array, it specifices that the JSON element must have properties with the names of the other elements, and normal rules apply.
+Example: ['propertyName'=>['|*', 'choice1'=>'int', 'choice2'=>'string'] ]
+Consider changing to make it an array key?
+FUTURE Example: ['propertyName'=>['|*'=>['choice1'=>'int', 'choice2'=>'string'] ]]
+
+
 
 ## REMOVE: Special types "array", "object", "object|array", and "array|object" can be specified for the general type, and if so, will not be validated recursivly and value validation methods are limited to empty and notEmpty.
 
